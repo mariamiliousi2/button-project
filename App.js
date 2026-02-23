@@ -7,12 +7,13 @@ import {
   FlatList,
   TextInput,
   Alert,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import Papa from 'papaparse';
 
 export default function App() {
@@ -107,31 +108,28 @@ export default function App() {
         columns: ['student_id', 'action', 'timestamp'],
       });
 
-      // Αίτηση permissions για αποθήκευση αρχείου
-      const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-      
-      if (!permissions.granted) {
-        Alert.alert('Σφάλμα', 'Απαιτούνται δικαιώματα για αποθήκευση αρχείου');
-        return;
-      }
-
-      // Δημιουργία αρχείου
+      // Δημιουργία αρχείου στο cache directory
       const fileName = `logs_${savedId}_${Date.now()}.csv`;
-      const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
-        permissions.directoryUri,
-        fileName,
-        'text/csv'
-      );
-
+      const fileUri = FileSystem.cacheDirectory + fileName;
+      
       // Εγγραφή δεδομένων
       await FileSystem.writeAsStringAsync(fileUri, csv, {
-        encoding: FileSystem.EncodingType.UTF8,
+        encoding: 'utf8',
       });
 
-      Alert.alert(
-        'Επιτυχία',
-        `Το αρχείο "${fileName}" αποθηκεύτηκε επιτυχώς!\nΣύνολο εγγραφών: ${allLogs.length}`
-      );
+      // Sharing API για να μοιραστεί/αποθηκευτεί το αρχείο
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: 'Αποθήκευση CSV',
+          UTI: 'public.comma-separated-values-text',
+        });
+      } else {
+        Alert.alert(
+          'Επιτυχία',
+          `Το αρχείο δημιουργήθηκε!\nΣύνολο εγγραφών: ${allLogs.length}\nΤοποθεσία: ${fileUri}`
+        );
+      }
     } catch (error) {
       console.error('Error exporting CSV:', error);
       Alert.alert('Σφάλμα', `Αποτυχία εξαγωγής CSV: ${error.message}`);
@@ -147,46 +145,51 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color="#4CAF50" />
-      </SafeAreaView>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" />
+          <ActivityIndicator size="large" color="#4CAF50" />
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   // Οθόνη εισαγωγής Student ID
   if (!studentId) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputTitle}>Καλώς ήρθατε!</Text>
-          <Text style={styles.inputSubtitle}>Παρακαλώ εισάγετε το Student ID σας</Text>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Student ID"
-            value={inputStudentId}
-            onChangeText={setInputStudentId}
-            autoCapitalize="none"
-            autoFocus
-          />
-          <Pressable
-            style={({ pressed }) => [
-              styles.submitButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={saveStudentId}
-          >
-            <Text style={styles.submitButtonText}>Εντάξει</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" />
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputTitle}>Καλώς ήρθατε!</Text>
+            <Text style={styles.inputSubtitle}>Παρακαλώ εισάγετε το Student ID σας</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Student ID"
+              value={inputStudentId}
+              onChangeText={setInputStudentId}
+              autoCapitalize="none"
+              autoFocus
+            />
+            <Pressable
+              style={({ pressed }) => [
+                styles.submitButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={saveStudentId}
+            >
+              <Text style={styles.submitButtonText}>Εντάξει</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   // Κύρια οθόνη
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
         <Text style={styles.headerText}>Student: {studentId}</Text>
@@ -261,6 +264,7 @@ export default function App() {
         <Text style={styles.exportButtonText}>📥 Εξαγωγή CSV</Text>
       </Pressable>
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

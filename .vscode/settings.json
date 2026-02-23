@@ -1,0 +1,7 @@
+{
+  "typescript.validate.enable": false,
+  "javascript.validate.enable": true,
+  "files.exclude": {
+    "**/node_modules": true
+  }
+}
