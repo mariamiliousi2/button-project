@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Student Attention Tracker",
+    "slug": "student-attention-tracker",
+    "version": "1.0.0",
+    "scheme": "studentattentiontracker",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#4CAF50"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.studentapp.attentiontracker"
+    },
+    "android": {
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "package": "com.studentapp.attentiontracker"
+    },
+    "web": {}
+  }
+}
+
