@@ -152,6 +152,139 @@ export default function App() {
     }
   };
 
+  const undoLastLog = async () => {
+    try {
+      // Βρίσκουμε ποια λίστα έχει το πιο πρόσφατο log
+      const lastProsekho = prosekhoLogs[0];
+      const lastVariemai = variemaiLogs[0];
+
+      if (!lastProsekho && !lastVariemai) {
+        Alert.alert('Πληροφορία', 'Δεν υπάρχουν logs για αναίρεση');
+        return;
+      }
+
+      let action;
+      if (!lastVariemai || (lastProsekho && lastProsekho.timestamp > lastVariemai.timestamp)) {
+        action = 'ΠΡΟΣΕΧΩ';
+      } else {
+        action = 'ΒΑΡΙΕΜΑΙ';
+      }
+
+      Alert.alert(
+        'Αναίρεση',
+        `Διαγραφή του τελευταίου log: ${action}?`,
+        [
+          {
+            text: 'Ακύρωση',
+            style: 'cancel',
+          },
+          {
+            text: 'Διαγραφή',
+            style: 'destructive',
+            onPress: async () => {
+              if (action === 'ΠΡΟΣΕΧΩ') {
+                const updated = prosekhoLogs.slice(1);
+                setProsekhoLogs(updated);
+                await AsyncStorage.setItem(`${studentId}_${currentSessionId}_prosekho`, JSON.stringify(updated));
+              } else {
+                const updated = variemaiLogs.slice(1);
+                setVariemaiLogs(updated);
+                await AsyncStorage.setItem(`${studentId}_${currentSessionId}_variemai`, JSON.stringify(updated));
+              }
+              Alert.alert('Επιτυχία', 'Το τελευταίο log διαγράφηκε');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error undoing log:', error);
+      Alert.alert('Σφάλμα', 'Αποτυχία αναίρεσης');
+    }
+  };
+
+  const deleteSession = async (sessionId) => {
+    Alert.alert(
+      'Διαγραφή Session',
+      `Είστε σίγουροι ότι θέλετε να διαγράψετε το session "${sessionId}" και όλα τα δεδομένα του;`,
+      [
+        {
+          text: 'Ακύρωση',
+          style: 'cancel',
+        },
+        {
+          text: 'Διαγραφή',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Διαγραφή logs του session
+              await AsyncStorage.removeItem(`${studentId}_${sessionId}_prosekho`);
+              await AsyncStorage.removeItem(`${studentId}_${sessionId}_variemai`);
+
+              // Διαγραφή session από τη λίστα
+              const updatedSessions = sessions.filter(s => s.id !== sessionId);
+              await AsyncStorage.setItem(`${studentId}_sessions`, JSON.stringify(updatedSessions));
+              setSessions(updatedSessions);
+
+              // Αν είναι το τρέχον session, επιστροφή στην επιλογή
+              if (currentSessionId === sessionId) {
+                setCurrentSessionId('');
+                setProsekhoLogs([]);
+                setVariemaiLogs([]);
+              }
+
+              Alert.alert('Επιτυχία', 'Το session διαγράφηκε');
+            } catch (error) {
+              console.error('Error deleting session:', error);
+              Alert.alert('Σφάλμα', 'Αποτυχία διαγραφής session');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const resetStudentId = async () => {
+    Alert.alert(
+      'Επαναφορά Student ID',
+      'ΠΡΟΣΟΧΗ: Αυτό θα διαγράψει το Student ID και ΟΛΑ τα sessions και δεδομένα. Είστε σίγουροι;',
+      [
+        {
+          text: 'Ακύρωση',
+          style: 'cancel',
+        },
+        {
+          text: 'Διαγραφή Όλων',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Διαγραφή όλων των sessions και logs
+              for (const session of sessions) {
+                await AsyncStorage.removeItem(`${studentId}_${session.id}_prosekho`);
+                await AsyncStorage.removeItem(`${studentId}_${session.id}_variemai`);
+              }
+              await AsyncStorage.removeItem(`${studentId}_sessions`);
+              await AsyncStorage.removeItem('studentId');
+
+              // Reset state
+              setStudentId('');
+              setCurrentSessionId('');
+              setSessions([]);
+              setProsekhoLogs([]);
+              setVariemaiLogs([]);
+              setInputStudentId('');
+              setInputSessionId('');
+
+              Alert.alert('Επιτυχία', 'Όλα τα δεδομένα διαγράφηκαν');
+            } catch (error) {
+              console.error('Error resetting student ID:', error);
+              Alert.alert('Σφάλμα', 'Αποτυχία επαναφοράς');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const exportToCSV = async () => {
     try {
       if (sessions.length === 0) {
@@ -353,7 +486,18 @@ export default function App() {
           <StatusBar barStyle="dark-content" />
           <View style={styles.inputContainer}>
             <Text style={styles.inputTitle}>Επιλογή Session</Text>
-            <Text style={styles.headerText}>Student: {studentId}</Text>
+            <View style={styles.studentIdRow}>
+              <Text style={styles.headerText}>Student: {studentId}</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.smallResetButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={resetStudentId}
+              >
+                <Text style={styles.smallResetButtonText}>🗑️</Text>
+              </Pressable>
+            </View>
             <Text style={styles.inputSubtitle}>Δημιουργήστε νέο ή επιλέξτε υπάρχον session</Text>
             
             <TextInput
@@ -378,6 +522,7 @@ export default function App() {
             {sessions.length > 0 && (
               <View style={styles.sessionsListContainer}>
                 <Text style={styles.sessionListTitle}>Υπάρχοντα Sessions:</Text>
+                <Text style={styles.sessionListHint}>Πατήστε παρατεταμένα για διαγραφή</Text>
                 <FlatList
                   data={sessions}
                   keyExtractor={(item) => item.id}
@@ -391,6 +536,7 @@ export default function App() {
                         setInputSessionId(item.id);
                         setCurrentSessionId(item.id);
                       }}
+                      onLongPress={() => deleteSession(item.id)}
                     >
                       <Text style={styles.sessionItemTitle}>{item.id}</Text>
                       <Text style={styles.sessionItemDate}>
@@ -485,6 +631,29 @@ export default function App() {
             }
           />
         </View>
+      </View>
+
+      {/* Κουμπιά Ενεργειών */}
+      <View style={styles.actionButtonsRow}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.undoButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={undoLastLog}
+        >
+          <Text style={styles.undoButtonText}>↶ Αναίρεση</Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.deleteSessionButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => deleteSession(currentSessionId)}
+        >
+          <Text style={styles.deleteSessionButtonText}>🗑️ Διαγραφή Session</Text>
+        </Pressable>
       </View>
 
       {/* Κουμπί Εξαγωγής CSV */}
@@ -714,5 +883,74 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
+  },
+  sessionListHint: {
+    fontSize: 12,
+    color: '#999',
+    fontStyle: 'italic',
+    marginBottom: 10,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  undoButton: {
+    flex: 1,
+    backgroundColor: '#FF9800',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  undoButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  deleteSessionButton: {
+    flex: 1,
+    backgroundColor: '#F44336',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  deleteSessionButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  resetButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    marginTop: 15,
+    elevation: 3,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  studentIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 5,
+  },
+  smallResetButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  smallResetButtonText: {
+    color: '#fff',
+    fontSize: 14,
   },
 });
