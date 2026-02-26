@@ -19,6 +19,9 @@ import Papa from 'papaparse';
 export default function App() {
   const [studentId, setStudentId] = useState('');
   const [inputStudentId, setInputStudentId] = useState('');
+  const [currentSessionId, setCurrentSessionId] = useState('');
+  const [inputSessionId, setInputSessionId] = useState('');
+  const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [prosekhoLogs, setProsekhoLogs] = useState([]);
   const [variemaiLogs, setVariemaiLogs] = useState([]);
@@ -28,17 +31,49 @@ export default function App() {
     checkStudentId();
   }, []);
 
+  // Φόρτωση logs όταν επιλέγεται session
+  useEffect(() => {
+    if (currentSessionId) {
+      loadSessionLogs(currentSessionId);
+    }
+  }, [currentSessionId]);
+
   const checkStudentId = async () => {
     try {
       const savedId = await AsyncStorage.getItem('studentId');
       if (savedId) {
         setStudentId(savedId);
+        await loadSessions(savedId);
       }
     } catch (error) {
       console.error('Error loading student ID:', error);
       Alert.alert('Σφάλμα', 'Αποτυχία φόρτωσης Student ID');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadSessions = async (studentId) => {
+    try {
+      const sessionsData = await AsyncStorage.getItem(`${studentId}_sessions`);
+      if (sessionsData) {
+        setSessions(JSON.parse(sessionsData));
+      }
+    } catch (error) {
+      console.error('Error loading sessions:', error);
+    }
+  };
+
+  const loadSessionLogs = async (sessionId) => {
+    try {
+      const prosekhoData = await AsyncStorage.getItem(`${studentId}_${sessionId}_prosekho`);
+      const variemaiData = await AsyncStorage.getItem(`${studentId}_${sessionId}_variemai`);
+      
+      setProsekhoLogs(prosekhoData ? JSON.parse(prosekhoData) : []);
+      setVariemaiLogs(variemaiData ? JSON.parse(variemaiData) : []);
+    } catch (error) {
+      console.error('Error loading session logs:', error);
+      Alert.alert('Σφάλμα', 'Αποτυχία φόρτωσης logs');
     }
   };
 
@@ -51,65 +86,189 @@ export default function App() {
     try {
       await AsyncStorage.setItem('studentId', inputStudentId.trim());
       setStudentId(inputStudentId.trim());
+      await loadSessions(inputStudentId.trim());
     } catch (error) {
       console.error('Error saving student ID:', error);
       Alert.alert('Σφάλμα', 'Αποτυχία αποθήκευσης Student ID');
     }
   };
 
-  const addLog = (action) => {
+  const createOrSelectSession = async () => {
+    if (!inputSessionId.trim()) {
+      Alert.alert('Σφάλμα', 'Παρακαλώ εισάγετε το Session ID');
+      return;
+    }
+
+    const sessionId = inputSessionId.trim();
+    
+    try {
+      // Έλεγχος αν υπάρχει ήδη το session
+      const existingSession = sessions.find(s => s.id === sessionId);
+      
+      if (!existingSession) {
+        // Δημιουργία νέου session
+        const newSession = {
+          id: sessionId,
+          createdAt: new Date().toISOString(),
+          lastAccessed: new Date().toISOString(),
+        };
+        
+        const updatedSessions = [...sessions, newSession];
+        await AsyncStorage.setItem(`${studentId}_sessions`, JSON.stringify(updatedSessions));
+        setSessions(updatedSessions);
+      } else {
+        // Ενημέρωση lastAccessed
+        const updatedSessions = sessions.map(s => 
+          s.id === sessionId ? { ...s, lastAccessed: new Date().toISOString() } : s
+        );
+        await AsyncStorage.setItem(`${studentId}_sessions`, JSON.stringify(updatedSessions));
+        setSessions(updatedSessions);
+      }
+      
+      setCurrentSessionId(sessionId);
+    } catch (error) {
+      console.error('Error creating/selecting session:', error);
+      Alert.alert('Σφάλμα', 'Αποτυχία δημιουργίας session');
+    }
+  };
+
+  const addLog = async (action) => {
     const timestamp = new Date().toISOString().slice(0, 19);
     const newLog = { timestamp, action };
 
-    if (action === 'ΠΡΟΣΕΧΩ') {
-      setProsekhoLogs((prev) => {
-        const updated = [newLog, ...prev];
-        return updated.slice(0, 50); // Μέγιστο 50 items
-      });
-    } else {
-      setVariemaiLogs((prev) => {
-        const updated = [newLog, ...prev];
-        return updated.slice(0, 50); // Μέγιστο 50 items
-      });
+    try {
+      if (action === 'ΠΡΟΣΕΧΩ') {
+        const updated = [newLog, ...prosekhoLogs].slice(0, 200); // Μέγιστο 200 items
+        setProsekhoLogs(updated);
+        await AsyncStorage.setItem(`${studentId}_${currentSessionId}_prosekho`, JSON.stringify(updated));
+      } else {
+        const updated = [newLog, ...variemaiLogs].slice(0, 200); // Μέγιστο 200 items
+        setVariemaiLogs(updated);
+        await AsyncStorage.setItem(`${studentId}_${currentSessionId}_variemai`, JSON.stringify(updated));
+      }
+    } catch (error) {
+      console.error('Error saving log:', error);
+      Alert.alert('Σφάλμα', 'Αποτυχία αποθήκευσης log');
     }
   };
 
   const exportToCSV = async () => {
     try {
-      // Ανάκτηση Student ID
-      const savedId = await AsyncStorage.getItem('studentId');
-      if (!savedId) {
-        Alert.alert('Σφάλμα', 'Δεν βρέθηκε Student ID');
+      if (sessions.length === 0) {
+        Alert.alert('Σφάλμα', 'Δεν υπάρχουν sessions για εξαγωγή');
         return;
       }
 
-      // Συνδυασμός όλων των logs
+      // Επιλογή session για export
+      Alert.alert(
+        'Επιλογή Session',
+        'Ποιο session θέλετε να εξάγετε;',
+        [
+          ...sessions.map(session => ({
+            text: `${session.id} (${new Date(session.createdAt).toLocaleDateString()})`,
+            onPress: () => exportSessionToCSV(session.id),
+          })),
+          {
+            text: 'Όλα τα Sessions',
+            onPress: () => exportAllSessionsToCSV(),
+          },
+          {
+            text: 'Ακύρωση',
+            style: 'cancel',
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      Alert.alert('Σφάλμα', `Αποτυχία εξαγωγής CSV: ${error.message}`);
+    }
+  };
+
+  const exportSessionToCSV = async (sessionId) => {
+    try {
+      // Φόρτωση logs του συγκεκριμένου session
+      const prosekhoData = await AsyncStorage.getItem(`${studentId}_${sessionId}_prosekho`);
+      const variemaiData = await AsyncStorage.getItem(`${studentId}_${sessionId}_variemai`);
+      
+      const prosekhoLogs = prosekhoData ? JSON.parse(prosekhoData) : [];
+      const variemaiLogs = variemaiData ? JSON.parse(variemaiData) : [];
+
       const allLogs = [
         ...prosekhoLogs.map((log) => ({
-          student_id: savedId,
+          student_id: studentId,
+          session_id: sessionId,
           action: log.action,
           timestamp: log.timestamp,
         })),
         ...variemaiLogs.map((log) => ({
-          student_id: savedId,
+          student_id: studentId,
+          session_id: sessionId,
           action: log.action,
           timestamp: log.timestamp,
         })),
-      ].sort((a, b) => b.timestamp.localeCompare(a.timestamp)); // Ταξινόμηση από νεότερο σε παλαιότερο
+      ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
       if (allLogs.length === 0) {
         Alert.alert('Πληροφορία', 'Δεν υπάρχουν δεδομένα για εξαγωγή');
         return;
       }
 
+      await createAndShareCSV(allLogs, `logs_${studentId}_${sessionId}_${Date.now()}.csv`);
+    } catch (error) {
+      console.error('Error exporting session CSV:', error);
+      Alert.alert('Σφάλμα', `Αποτυχία εξαγωγής: ${error.message}`);
+    }
+  };
+
+  const exportAllSessionsToCSV = async () => {
+    try {
+      const allLogs = [];
+
+      for (const session of sessions) {
+        const prosekhoData = await AsyncStorage.getItem(`${studentId}_${session.id}_prosekho`);
+        const variemaiData = await AsyncStorage.getItem(`${studentId}_${session.id}_variemai`);
+        
+        const prosekhoLogs = prosekhoData ? JSON.parse(prosekhoData) : [];
+        const variemaiLogs = variemaiData ? JSON.parse(variemaiData) : [];
+
+        allLogs.push(
+          ...prosekhoLogs.map((log) => ({
+            student_id: studentId,
+            session_id: session.id,
+            action: log.action,
+            timestamp: log.timestamp,
+          })),
+          ...variemaiLogs.map((log) => ({
+            student_id: studentId,
+            session_id: session.id,
+            action: log.action,
+            timestamp: log.timestamp,
+          }))
+        );
+      }
+
+      if (allLogs.length === 0) {
+        Alert.alert('Πληροφορία', 'Δεν υπάρχουν δεδομένα για εξαγωγή');
+        return;
+      }
+
+      const sortedLogs = allLogs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      await createAndShareCSV(sortedLogs, `logs_${studentId}_all_sessions_${Date.now()}.csv`);
+    } catch (error) {
+      console.error('Error exporting all sessions:', error);
+      Alert.alert('Σφάλμα', `Αποτυχία εξαγωγής: ${error.message}`);
+    }
+  };
+
+  const createAndShareCSV = async (data, fileName) => {
+    try {
       // Δημιουργία CSV
-      const csv = Papa.unparse(allLogs, {
+      const csv = Papa.unparse(data, {
         header: true,
-        columns: ['student_id', 'action', 'timestamp'],
+        columns: ['student_id', 'session_id', 'action', 'timestamp'],
       });
 
       // Δημιουργία αρχείου στο cache directory
-      const fileName = `logs_${savedId}_${Date.now()}.csv`;
       const fileUri = FileSystem.cacheDirectory + fileName;
       
       // Εγγραφή δεδομένων
@@ -127,7 +286,7 @@ export default function App() {
       } else {
         Alert.alert(
           'Επιτυχία',
-          `Το αρχείο δημιουργήθηκε!\nΣύνολο εγγραφών: ${allLogs.length}\nΤοποθεσία: ${fileUri}`
+          `Το αρχείο δημιουργήθηκε!\nΣύνολο εγγραφών: ${data.length}\nΤοποθεσία: ${fileUri}`
         );
       }
     } catch (error) {
@@ -186,6 +345,71 @@ export default function App() {
     );
   }
 
+  // Οθόνη επιλογής Session
+  if (!currentSessionId) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" />
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputTitle}>Επιλογή Session</Text>
+            <Text style={styles.headerText}>Student: {studentId}</Text>
+            <Text style={styles.inputSubtitle}>Δημιουργήστε νέο ή επιλέξτε υπάρχον session</Text>
+            
+            <TextInput
+              style={styles.textInput}
+              placeholder="Session ID (π.χ. Μάθημα_24-02-2026)"
+              value={inputSessionId}
+              onChangeText={setInputSessionId}
+              autoCapitalize="none"
+              autoFocus
+            />
+            
+            <Pressable
+              style={({ pressed }) => [
+                styles.submitButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={createOrSelectSession}
+            >
+              <Text style={styles.submitButtonText}>Συνέχεια</Text>
+            </Pressable>
+
+            {sessions.length > 0 && (
+              <View style={styles.sessionsListContainer}>
+                <Text style={styles.sessionListTitle}>Υπάρχοντα Sessions:</Text>
+                <FlatList
+                  data={sessions}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.sessionItem,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={() => {
+                        setInputSessionId(item.id);
+                        setCurrentSessionId(item.id);
+                      }}
+                    >
+                      <Text style={styles.sessionItemTitle}>{item.id}</Text>
+                      <Text style={styles.sessionItemDate}>
+                        Δημιουργήθηκε: {new Date(item.createdAt).toLocaleString('el-GR')}
+                      </Text>
+                      <Text style={styles.sessionItemDate}>
+                        Τελευταία πρόσβαση: {new Date(item.lastAccessed).toLocaleString('el-GR')}
+                      </Text>
+                    </Pressable>
+                  )}
+                />
+              </View>
+            )}
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
   // Κύρια οθόνη
   return (
     <SafeAreaProvider>
@@ -193,6 +417,16 @@ export default function App() {
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
         <Text style={styles.headerText}>Student: {studentId}</Text>
+        <Text style={styles.sessionText}>Session: {currentSessionId}</Text>
+        <Pressable
+          style={({ pressed }) => [
+            styles.changeSessionButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => setCurrentSessionId('')}
+        >
+          <Text style={styles.changeSessionText}>🔄 Αλλαγή Session</Text>
+        </Pressable>
       </View>
 
       {/* Κουμπιά Δράσης */}
@@ -285,6 +519,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     textAlign: 'center',
+  },
+  sessionText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 5,
+  },
+  changeSessionButton: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    backgroundColor: '#2196F3',
+    borderRadius: 5,
+    alignSelf: 'center',
+  },
+  changeSessionText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   inputContainer: {
     flex: 1,
@@ -425,5 +678,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  sessionsListContainer: {
+    marginTop: 30,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: 300,
+  },
+  sessionListTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  sessionItem: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  sessionItemTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  sessionItemDate: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
 });
