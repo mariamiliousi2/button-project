@@ -26,6 +26,20 @@ export default function App() {
   const [prosekhoLogs, setProsekhoLogs] = useState([]);
   const [variemaiLogs, setVariemaiLogs] = useState([]);
 
+  // Helper function για ελληνική ώρα
+  const getGreekTimestamp = () => {
+    return new Date().toLocaleString('el-GR', {
+      timeZone: 'Europe/Athens',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  };
+
   // Έλεγχος για Student ID στην εκκίνηση
   useEffect(() => {
     checkStudentId();
@@ -133,7 +147,7 @@ export default function App() {
   };
 
   const addLog = async (action) => {
-    const timestamp = new Date().toISOString().slice(0, 19);
+    const timestamp = getGreekTimestamp();
     const newLog = { timestamp, action };
 
     try {
