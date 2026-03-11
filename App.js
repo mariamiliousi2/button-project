@@ -360,7 +360,7 @@ export default function App() {
         return;
       }
 
-      await createAndShareCSV(allLogs, `logs_${studentId}_${sessionId}_${Date.now()}.csv`);
+      await createAndShareCSV(allLogs, `session_${sessionId}_student_${studentId}.csv`);
     } catch (error) {
       console.error('Error exporting session CSV:', error);
       Alert.alert('Σφάλμα', `Αποτυχία εξαγωγής: ${error.message}`);
@@ -400,7 +400,7 @@ export default function App() {
       }
 
       const sortedLogs = allLogs.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      await createAndShareCSV(sortedLogs, `logs_${studentId}_all_sessions_${Date.now()}.csv`);
+      await createAndShareCSV(sortedLogs, `all_sessions_student_${studentId}.csv`);
     } catch (error) {
       console.error('Error exporting all sessions:', error);
       Alert.alert('Σφάλμα', `Αποτυχία εξαγωγής: ${error.message}`);
