@@ -516,7 +516,7 @@ export default function App() {
             
             <TextInput
               style={styles.textInput}
-              placeholder="Session ID (π.χ. Μάθημα_24-02-2026)"
+              placeholder="Session ID"
               value={inputSessionId}
               onChangeText={setInputSessionId}
               autoCapitalize="none"
