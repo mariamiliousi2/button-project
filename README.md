@@ -9,6 +9,23 @@
 ✅ **Ιστορικό Logs** - Δείτε το ιστορικό των καταγραφών σας σε δύο λίστες
 ✅ **Εξαγωγή CSV** - Εξάγετε όλα τα δεδομένα σε αρχείο CSV
 
+## Χρήση Χωρίς Expo Go (QR -> Ιστοσελίδα)
+
+Για να ανοίγει η εφαρμογή απευθείας από QR χωρίς Expo Go, πρέπει να τρέχει ως website με δημόσιο HTTPS link.
+
+1. Κάντε build για web:
+   ```bash
+   npm run build:web
+   ```
+2. Θα δημιουργηθεί ο φάκελος `dist`.
+3. Κάντε deploy το `dist` σε hosting (π.χ. Netlify, Vercel, GitHub Pages, Firebase Hosting).
+4. Φτιάξτε QR code που δείχνει στο δημόσιο `https://...` URL του site.
+
+Σημείωση:
+- Το QR του Expo Dev Server (`exp://...`) απαιτεί Expo Go.
+- Το QR ενός κανονικού `https://...` URL ανοίγει με την κάμερα του κινητού, χωρίς εγκατάσταση εφαρμογής.
+- Στο web η εξαγωγή CSV γίνεται ως download από τον browser.
+
 ## Εγκατάσταση
 
 ### Προαπαιτούμενα
@@ -36,6 +53,7 @@
    - **Android:** `npm run android` ή πατήστε `a` στο Expo CLI
    - **iOS:** `npm run ios` ή πατήστε `i` στο Expo CLI (μόνο σε macOS)
    - **Φυσική συσκευή:** Σκανάρετε το QR code με την εφαρμογή Expo Go
+   - **Χωρίς Expo Go:** Κάντε deploy την web έκδοση και σκανάρετε QR του `https://...` link
 
 ## Δομή Εφαρμογής
 

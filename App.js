@@ -9,6 +9,7 @@ import {
   Alert,
   StatusBar,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -414,6 +415,20 @@ export default function App() {
         header: true,
         columns: ['student_id', 'session_id', 'action', 'timestamp'],
       });
+
+      if (Platform.OS === 'web') {
+        // Στο web κατεβάζουμε CSV μέσω browser χωρίς Expo Sharing/FileSystem.
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      }
 
       // Δημιουργία αρχείου στο cache directory
       const fileUri = FileSystem.cacheDirectory + fileName;
